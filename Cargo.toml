@@ -1,0 +1,21 @@
+[package]
+name = "stateless"
+version = "0.1.0"
+authors = ["Matthew Berger <matthewjordanberger@gmail.com>"]
+description = """
+stateless is a rust procedural macro that generates state machines from a DSL.
+Decouples state transitions from business logic with a syntax similar to smlang.
+"""
+homepage = "https://github.com/matthewjberger/stateless"
+repository = "https://github.com/matthewjberger/stateless"
+keywords = ["state-machine", "macro", "enum", "no-std"]
+license = "MIT"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "1.0", features = ["full", "extra-traits"] }
