@@ -3,8 +3,8 @@ name = "stateless"
 version = "0.1.0"
 authors = ["Matthew Berger <matthewjordanberger@gmail.com>"]
 description = """
-stateless is a rust procedural macro that generates state machines from a DSL.
-Decouples state transitions from business logic with a syntax similar to smlang.
+A lightweight, zero-cost state machine library that separates structure from behavior.
+Guards and actions live in wrapper code, not the DSL.
 """
 homepage = "https://github.com/matthewjberger/stateless"
 repository = "https://github.com/matthewjberger/stateless"
