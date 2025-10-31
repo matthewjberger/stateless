@@ -8,9 +8,7 @@ A lightweight, zero-cost state machine library for Rust that separates structure
 
 ## Philosophy
 
-**State machines should define structure, not behavior.**
-
-This library provides a declarative DSL for defining state transitions. You handle all guards, actions, and business logic in clean, idiomatic Rust wrapper code.
+This library separates state machine structure from behavior. The DSL defines valid state transitions, while your wrapper code handles guards, actions, and business logic in idiomatic Rust.
 
 ## Why Use This?
 
@@ -33,48 +31,58 @@ stateless = "0.1.0"
 ```rust
 use stateless::statemachine;
 
-// Define the state machine structure
 statemachine! {
     transitions: {
         *Idle + Start = Running,
-        Running + Stop = Idle,
+        Running + Pause | Stop = Idle,
+        Idle | Running + Connect = Connected,
+        Connected + Disconnect = Idle,
+        Connected + Tick = _,
+        _ + Reset = Idle,
     }
 }
 
-// Wrap it with your business logic
-struct MyMachine {
+struct Machine {
     state: State,
     battery: u32,
+    ticks: u32,
 }
 
-impl MyMachine {
+impl Machine {
     fn new() -> Self {
         Self {
             state: State::default(),
             battery: 100,
+            ticks: 0,
         }
     }
 
     fn start(&mut self) {
-        // Check if transition is valid
         let Some(new_state) = self.state.process_event(Event::Start) else {
             return;
         };
 
-        // Guard: check preconditions
         if self.battery < 20 {
             return;
         }
 
-        // Action: side effects
         self.battery -= 10;
-
-        // Apply transition
         self.state = new_state;
     }
 
-    fn stop(&mut self) {
-        if let Some(new_state) = self.state.process_event(Event::Stop) {
+    fn tick(&mut self) {
+        let Some(new_state) = self.state.process_event(Event::Tick) else {
+            return;
+        };
+
+        self.ticks += 1;
+        self.state = new_state;
+    }
+
+    fn reset(&mut self) {
+        if let Some(new_state) = self.state.process_event(Event::Reset) {
+            self.battery = 100;
+            self.ticks = 0;
             self.state = new_state;
         }
     }
@@ -287,7 +295,7 @@ impl State {
 
 ## Error Handling
 
-`process_event` returns `Option<State>`:
+The `process_event` method returns `Option<State>`:
 - `Some(new_state)`: Transition is valid
 - `None`: No valid transition for current state + event
 
