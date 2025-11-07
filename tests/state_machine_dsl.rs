@@ -1,7 +1,7 @@
 use stateless::statemachine;
 
 #[test]
-fn comprehensive_state_machine_features() {
+fn test_state_machine_dsl() {
     statemachine! {
         derive_states: [Debug, Clone, PartialEq, Eq, Hash],
         derive_events: [Debug, Clone, PartialEq],
