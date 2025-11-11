@@ -272,6 +272,9 @@ fn main() {
 
     println!("═══ Final State ═══");
     println!("Player state: {:?}", player.state);
-    println!("Player position: ({:.1}, {:.1})", player.position.0, player.position.1);
+    println!(
+        "Player position: ({:.1}, {:.1})",
+        player.position.0, player.position.1
+    );
     println!("Has item: {}", player.item.is_some());
 }

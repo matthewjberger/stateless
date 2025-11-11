@@ -80,7 +80,10 @@ impl Robot {
         };
 
         self.movement_ticks += 1;
-        println!("  [Internal] Movement tick {} (still Moving)", self.movement_ticks);
+        println!(
+            "  [Internal] Movement tick {} (still Moving)",
+            self.movement_ticks
+        );
         self.state = new_state;
     }
 
