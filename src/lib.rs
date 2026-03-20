@@ -1,21 +1,14 @@
-#![no_std]
+use std::collections::BTreeSet;
 
-extern crate alloc;
-
-use alloc::collections::BTreeSet;
-use alloc::format;
-use alloc::string::{String, ToString};
-use alloc::vec;
-use alloc::vec::Vec;
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::quote;
 use syn::{
+    Error, Ident, Result, Token,
     parse::{Parse, ParseStream},
     parse_macro_input,
     punctuated::Punctuated,
     token::Comma,
-    Error, Ident, Result, Token,
 };
 
 struct StateMachine {
@@ -173,16 +166,31 @@ impl Parse for StatePattern {
 
 fn validate_no_duplicate_transitions(transitions: &[Transition]) -> Result<()> {
     let mut seen = BTreeSet::new();
+    let mut wildcard_seen = BTreeSet::new();
 
     for transition in transitions {
         let state_idents: Vec<String> = match &transition.states {
             StatePattern::Single { ident, .. } => {
-                alloc::vec![ident.to_string()]
+                vec![ident.to_string()]
             }
             StatePattern::Multiple { states } => {
                 states.iter().map(|(ident, _)| ident.to_string()).collect()
             }
-            StatePattern::Wildcard => continue,
+            StatePattern::Wildcard => {
+                for event in &transition.events {
+                    let event_str = event.to_string();
+                    if !wildcard_seen.insert(event_str.clone()) {
+                        return Err(Error::new(
+                            event.span(),
+                            format!(
+                                "duplicate wildcard transition: '_ + {}' is already defined",
+                                event_str
+                            ),
+                        ));
+                    }
+                }
+                continue;
+            }
         };
 
         for state_str in state_idents {
@@ -227,14 +235,16 @@ pub fn statemachine(input: TokenStream) -> TokenStream {
         Ident::new("Event", Span::call_site())
     };
 
-    let mut all_states = alloc::vec::Vec::new();
-    let mut all_events = alloc::vec::Vec::new();
+    let mut all_states = Vec::new();
+    let mut all_events = Vec::new();
+    let mut seen_states = BTreeSet::new();
+    let mut seen_events = BTreeSet::new();
     let mut initial_state = None;
 
     for transition in &state_machine.transitions {
         match &transition.states {
             StatePattern::Single { ident, initial } => {
-                if !all_states.iter().any(|s| s == ident) {
+                if seen_states.insert(ident.to_string()) {
                     all_states.push(ident.clone());
                 }
                 if *initial && initial_state.is_none() {
@@ -243,7 +253,7 @@ pub fn statemachine(input: TokenStream) -> TokenStream {
             }
             StatePattern::Multiple { states } => {
                 for (ident, initial) in states {
-                    if !all_states.iter().any(|s| s == ident) {
+                    if seen_states.insert(ident.to_string()) {
                         all_states.push(ident.clone());
                     }
                     if *initial && initial_state.is_none() {
@@ -254,14 +264,14 @@ pub fn statemachine(input: TokenStream) -> TokenStream {
             StatePattern::Wildcard => {}
         }
 
-        if let TargetState::State(ref target) = transition.target {
-            if !all_states.iter().any(|s| s == target) {
-                all_states.push(target.clone());
-            }
+        if let TargetState::State(ref target) = transition.target
+            && seen_states.insert(target.to_string())
+        {
+            all_states.push(target.clone());
         }
 
         for event in &transition.events {
-            if !all_events.iter().any(|e| e == event) {
+            if seen_events.insert(event.to_string()) {
                 all_events.push(event.clone());
             }
         }
@@ -279,6 +289,7 @@ pub fn statemachine(input: TokenStream) -> TokenStream {
 
     let default_derives = vec![
         Ident::new("Debug", Span::call_site()),
+        Ident::new("Copy", Span::call_site()),
         Ident::new("Clone", Span::call_site()),
         Ident::new("PartialEq", Span::call_site()),
         Ident::new("Eq", Span::call_site()),
@@ -313,29 +324,36 @@ pub fn statemachine(input: TokenStream) -> TokenStream {
     };
 
     let mut transition_checks = TokenStream2::new();
+    let mut wildcard_checks = TokenStream2::new();
 
     for transition in &state_machine.transitions {
         let events = &transition.events;
 
         let target_state = match &transition.target {
             TargetState::State(state) => quote! { #state_name::#state },
-            TargetState::Internal => quote! { self.clone() },
+            TargetState::Internal => quote! {
+                match *self {
+                    #(#state_name::#all_states => #state_name::#all_states),*
+                }
+            },
         };
+
+        let is_wildcard = matches!(&transition.states, StatePattern::Wildcard);
 
         let state_patterns: Vec<_> = match &transition.states {
             StatePattern::Single { ident, .. } => {
-                alloc::vec![quote! { #state_name::#ident }]
+                vec![quote! { #state_name::#ident }]
             }
             StatePattern::Multiple { states } => states
                 .iter()
                 .map(|(ident, _)| quote! { #state_name::#ident })
                 .collect(),
             StatePattern::Wildcard => {
-                alloc::vec![quote! { _ }]
+                vec![quote! { _ }]
             }
         };
 
-        let state_condition = if state_patterns.len() == 1 && state_patterns[0].to_string() == "_" {
+        let state_condition = if is_wildcard {
             quote! { true }
         } else if state_patterns.len() == 1 {
             let pattern = &state_patterns[0];
@@ -344,16 +362,24 @@ pub fn statemachine(input: TokenStream) -> TokenStream {
             quote! { #(matches!(*self, #state_patterns))||* }
         };
 
+        let dest = if is_wildcard {
+            &mut wildcard_checks
+        } else {
+            &mut transition_checks
+        };
+
         for event in events {
             let event_condition = quote! { matches!(event, #event_name::#event) };
 
-            transition_checks.extend(quote! {
+            dest.extend(quote! {
                 if #state_condition && #event_condition {
                     return ::core::option::Option::Some(#target_state);
                 }
             });
         }
     }
+
+    transition_checks.extend(wildcard_checks);
 
     let expanded = quote! {
         #state_enum
