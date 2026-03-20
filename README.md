@@ -1,36 +1,22 @@
-# stateless
+<h1 align="center">stateless</h1>
 
-A lightweight, zero-cost state machine library for Rust that separates structure from behavior.
+<p align="center">
+  <a href="https://github.com/matthewjberger/stateless"><img alt="github" src="https://img.shields.io/badge/github-matthewjberger/stateless-8da0cb?style=for-the-badge&labelColor=555555&logo=github" height="20"></a>
+  <a href="https://crates.io/crates/stateless"><img alt="crates.io" src="https://img.shields.io/crates/v/stateless.svg?style=for-the-badge&color=fc8d62&logo=rust" height="20"></a>
+  <a href="https://github.com/matthewjberger/stateless/blob/main/MIT.md"><img alt="license" src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge&labelColor=555555" height="20"></a>
+</p>
 
-[![Crates.io](https://img.shields.io/crates/v/stateless.svg)](https://crates.io/crates/stateless)
-[![Documentation](https://docs.rs/stateless/badge.svg)](https://docs.rs/stateless)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<p align="center"><strong>A zero-cost state machine macro that separates structure from behavior.</strong></p>
 
-## Philosophy
+<p align="center">
+  <code>cargo add stateless</code>
+</p>
 
-Most state machine libraries couple behavior to the state machine itself — guards, actions, and context structs all tangled into the DSL. This makes the state machine hard to test, hard to refactor, and impossible to compose.
+Most state machine libraries couple behavior to the state machine itself. Guards, actions, and context structs all get tangled into the DSL. This makes the state machine hard to test, hard to refactor, and impossible to compose.
 
 `stateless` takes the opposite approach: the macro is a pure transition table. It generates two enums and a lookup function. Guards, side effects, and error handling live in your own code, using normal Rust patterns. The state machine doesn't know your types exist, and your types don't depend on any framework trait.
 
-## Why Use This?
-
-- **Zero coupling**: State machine knows nothing about your types
-- **Idiomatic Rust**: Use `Result`, methods, and proper error handling
-- **Zero cost**: Compiles to efficient `matches!()` checks with early returns
-- **Type safe**: Leverages Rust's type system fully
-- **No runtime dependencies**: Generated code uses only `core` — no allocator needed, `no_std` compatible
-- **Clear code**: Business logic lives in one place, not scattered
-
-## Installation
-
-```toml
-[dependencies]
-stateless = "0.4.0"
-```
-
 ## Quick Start
-
-Define your state machine with the DSL, then use `process_event` to drive transitions:
 
 ```rust
 use stateless::statemachine;
@@ -52,7 +38,7 @@ if let Some(new_state) = state.process_event(Event::Start) {
 assert_eq!(state, State::Running);
 ```
 
-`process_event` returns `Option<State>` — `Some(new_state)` if the transition is valid, `None` if not. This lets you insert guards and actions between checking validity and applying the transition.
+`process_event` returns `Some(new_state)` if the transition is valid, `None` if not. This lets you insert guards and actions between checking validity and applying the transition.
 
 ## Generated Code
 
@@ -239,10 +225,10 @@ statemachine! {
 
 The macro validates your state machine at compile time:
 
-- **Duplicate transitions** — same state + event pair defined twice
-- **Multiple initial states** — more than one state marked with `*`
-- **Empty transitions** — no transitions defined
-- **Duplicate wildcards** — same event used in multiple wildcard transitions
+- **Duplicate transitions**: same state + event pair defined twice
+- **Multiple initial states**: more than one state marked with `*`
+- **Empty transitions**: no transitions defined
+- **Duplicate wildcards**: same event used in multiple wildcard transitions
 
 ```rust
 statemachine! {
