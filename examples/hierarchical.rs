@@ -7,8 +7,8 @@ statemachine! {
         Walking + StopWalking = Idle,
         Idle | Walking + StartRunning = Running,
         Running + StopRunning = Idle,
-        _ + PickUpItem = Idle,
-        _ + DropItem = Idle,
+        _ + PickUpItem = _,
+        _ + DropItem = _,
     }
 }
 

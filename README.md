@@ -23,7 +23,7 @@ This library separates state machine structure from behavior. The DSL defines va
 
 ```toml
 [dependencies]
-stateless = "0.2.0"
+stateless = "0.3.0"
 ```
 
 ## Quick Start
@@ -235,7 +235,12 @@ statemachine! {
 
 ## Compile Time Validation
 
-The macro validates your state machine at compile time. Duplicate transitions are rejected:
+The macro validates your state machine at compile time:
+
+- **Duplicate transitions** — same state + event pair defined twice
+- **Multiple initial states** — more than one state marked with `*`
+- **Empty transitions** — no transitions defined
+- **Duplicate wildcards** — same event used in multiple wildcard transitions
 
 ```rust
 statemachine! {

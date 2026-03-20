@@ -25,8 +25,7 @@ struct Transition {
 }
 
 enum StatePattern {
-    Single { ident: Ident, initial: bool },
-    Multiple { states: Vec<(Ident, bool)> },
+    Named(Vec<(Ident, bool)>),
     Wildcard,
 }
 
@@ -153,14 +152,7 @@ impl Parse for StatePattern {
             states.push((input.parse::<Ident>()?, next_initial));
         }
 
-        if states.len() == 1 {
-            Ok(StatePattern::Single {
-                ident: states[0].0.clone(),
-                initial,
-            })
-        } else {
-            Ok(StatePattern::Multiple { states })
-        }
+        Ok(StatePattern::Named(states))
     }
 }
 
@@ -170,10 +162,7 @@ fn validate_no_duplicate_transitions(transitions: &[Transition]) -> Result<()> {
 
     for transition in transitions {
         let state_idents: Vec<String> = match &transition.states {
-            StatePattern::Single { ident, .. } => {
-                vec![ident.to_string()]
-            }
-            StatePattern::Multiple { states } => {
+            StatePattern::Named(states) => {
                 states.iter().map(|(ident, _)| ident.to_string()).collect()
             }
             StatePattern::Wildcard => {
@@ -219,6 +208,15 @@ fn validate_no_duplicate_transitions(transitions: &[Transition]) -> Result<()> {
 pub fn statemachine(input: TokenStream) -> TokenStream {
     let state_machine = parse_macro_input!(input as StateMachine);
 
+    if state_machine.transitions.is_empty() {
+        return Error::new(
+            Span::call_site(),
+            "state machine must have at least one transition",
+        )
+        .to_compile_error()
+        .into();
+    }
+
     if let Err(e) = validate_no_duplicate_transitions(&state_machine.transitions) {
         return e.to_compile_error().into();
     }
@@ -242,26 +240,23 @@ pub fn statemachine(input: TokenStream) -> TokenStream {
     let mut initial_state = None;
 
     for transition in &state_machine.transitions {
-        match &transition.states {
-            StatePattern::Single { ident, initial } => {
+        if let StatePattern::Named(states) = &transition.states {
+            for (ident, initial) in states {
                 if seen_states.insert(ident.to_string()) {
                     all_states.push(ident.clone());
                 }
-                if *initial && initial_state.is_none() {
+                if *initial {
+                    if initial_state.is_some() {
+                        return Error::new(
+                            ident.span(),
+                            "multiple initial states: only one state can be marked with '*'",
+                        )
+                        .to_compile_error()
+                        .into();
+                    }
                     initial_state = Some(ident.clone());
                 }
             }
-            StatePattern::Multiple { states } => {
-                for (ident, initial) in states {
-                    if seen_states.insert(ident.to_string()) {
-                        all_states.push(ident.clone());
-                    }
-                    if *initial && initial_state.is_none() {
-                        initial_state = Some(ident.clone());
-                    }
-                }
-            }
-            StatePattern::Wildcard => {}
         }
 
         if let TargetState::State(ref target) = transition.target
@@ -341,10 +336,7 @@ pub fn statemachine(input: TokenStream) -> TokenStream {
         let is_wildcard = matches!(&transition.states, StatePattern::Wildcard);
 
         let state_patterns: Vec<_> = match &transition.states {
-            StatePattern::Single { ident, .. } => {
-                vec![quote! { #state_name::#ident }]
-            }
-            StatePattern::Multiple { states } => states
+            StatePattern::Named(states) => states
                 .iter()
                 .map(|(ident, _)| quote! { #state_name::#ident })
                 .collect(),

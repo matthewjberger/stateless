@@ -1,8 +1,6 @@
 use stateless::statemachine;
 
 statemachine! {
-    derive_states: [Debug, Clone, PartialEq, Eq],
-    derive_events: [Debug, Clone, PartialEq, Eq],
     transitions: {
         *Off + PowerOn = Idle,
         Idle + MoveTo = Moving,
