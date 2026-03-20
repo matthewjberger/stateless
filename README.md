@@ -14,9 +14,9 @@ This library separates state machine structure from behavior. The DSL defines va
 
 - **Zero coupling**: State machine knows nothing about your types
 - **Idiomatic Rust**: Use `Result`, methods, and proper error handling
-- **Zero cost**: Compiles to efficient sequential checks
+- **Zero cost**: Compiles to efficient `matches!()` checks with early returns
 - **Type safe**: Leverages Rust's type system fully
-- **No dependencies**: Generated code is `no_std` compatible (uses only `core`)
+- **No runtime dependencies**: Generated code uses only `core` — no allocator needed, `no_std` compatible
 - **Clear code**: Business logic lives in one place, not scattered
 
 ## Installation
@@ -28,63 +28,68 @@ stateless = "0.1.0"
 
 ## Quick Start
 
+Define your state machine with the DSL, then use `process_event` to drive transitions:
+
 ```rust
 use stateless::statemachine;
 
 statemachine! {
     transitions: {
         *Idle + Start = Running,
-        Running + Pause | Stop = Idle,
-        Idle | Running + Connect = Connected,
-        Connected + Disconnect = Idle,
-        Connected + Tick = _,
+        Running + Stop = Idle,
         _ + Reset = Idle,
     }
 }
 
-struct Machine {
-    state: State,
-    battery: u32,
-    ticks: u32,
+let mut state = State::default(); // Idle (marked with *)
+assert_eq!(state, State::Idle);
+
+if let Some(new_state) = state.process_event(Event::Start) {
+    state = new_state;
+}
+assert_eq!(state, State::Running);
+```
+
+`process_event` returns `Option<State>` — `Some(new_state)` if the transition is valid, `None` if not. This lets you insert guards and actions between checking validity and applying the transition.
+
+## Generated Code
+
+Given this DSL:
+
+```rust
+statemachine! {
+    transitions: {
+        *Idle + Start = Running,
+        Running + Stop = Idle,
+    }
+}
+```
+
+The macro generates:
+
+```rust
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum State {
+    Idle,
+    Running,
 }
 
-impl Machine {
-    fn new() -> Self {
-        Self {
-            state: State::default(),
-            battery: 100,
-            ticks: 0,
-        }
+impl Default for State {
+    fn default() -> Self {
+        State::Idle
     }
+}
 
-    fn start(&mut self) {
-        let Some(new_state) = self.state.process_event(Event::Start) else {
-            return;
-        };
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum Event {
+    Start,
+    Stop,
+}
 
-        if self.battery < 20 {
-            return;
-        }
-
-        self.battery -= 10;
-        self.state = new_state;
-    }
-
-    fn tick(&mut self) {
-        let Some(new_state) = self.state.process_event(Event::Tick) else {
-            return;
-        };
-
-        self.ticks += 1;
-        self.state = new_state;
-    }
-
-    fn reset(&mut self) {
-        if let Some(new_state) = self.state.process_event(Event::Reset) {
-            self.battery = 100;
-            self.ticks = 0;
-            self.state = new_state;
-        }
+impl State {
+    pub fn process_event(&self, event: Event) -> Option<State> {
+        // Returns Some(new_state) if transition is valid
+        // Returns None if no valid transition
     }
 }
 ```
@@ -93,46 +98,46 @@ impl Machine {
 
 ### Guards and Actions
 
-Guards and actions live in your wrapper code, not the DSL.
-
-`state.process_event(event)` returns `Option<State>` - the new state if the transition is valid. You check guards, perform actions, then apply the state:
+Guards and actions live in your wrapper code, not the DSL. Call `process_event` to check validity, verify your guards, perform side effects, then apply the state:
 
 ```rust
 fn connect(&mut self, id: u32) {
-    // Check if transition is valid for current state
     let Some(new_state) = self.state.process_event(Event::Connect) else {
         return;
     };
 
-    // Guard: check preconditions
     if id > self.max_connections {
         return;
     }
 
-    // Guard: check resources
     if self.battery < 5 {
         return;
     }
 
-    // Actions: side effects
     self.connection_id = id;
     self.battery -= 5;
-
-    // Apply transition
     self.state = new_state;
 }
 ```
 
-This approach gives you:
-- Full control over when to apply transitions
-- Multiple guards with early returns
-- Actions only happen if all guards pass
-- Zero coupling between state machine structure and business logic
-- Clean, idiomatic Rust
+### Initial State
+
+Mark the initial state with `*`. This state is used for the generated `Default` implementation:
+
+```rust
+statemachine! {
+    transitions: {
+        *Idle + Start = Running,  // Idle is the initial state
+        Running + Stop = Idle,
+    }
+}
+
+let state = State::default(); // State::Idle
+```
 
 ### State Patterns
 
-Multiple states can share transitions:
+Multiple source states can share a transition:
 
 ```rust
 statemachine! {
@@ -163,19 +168,20 @@ Transition from any state. Specific transitions always take priority over wildca
 statemachine! {
     transitions: {
         *Idle + Start = Running,
-        _ + Reset = Idle,  // From any state
+        _ + Reset = Idle,
     }
 }
 ```
 
 ### Internal Transitions
 
-Stay in the same state while performing side effects:
+Stay in the current state while performing side effects:
 
 ```rust
 statemachine! {
     transitions: {
-        Moving + Tick = _,  // Stays in Moving
+        *Moving + Tick = _,
+        Moving + Arrive = Idle,
     }
 }
 
@@ -185,15 +191,15 @@ impl Robot {
             return;
         };
 
-        self.movement_ticks += 1;  // Side effect without changing state
+        self.movement_ticks += 1;
         self.state = new_state;
     }
 }
 ```
 
-Internal transitions are useful for periodic updates, counters, or logging while remaining in the current state.
-
 ### Custom Derives
+
+Default derives are `Debug, Copy, Clone, PartialEq, Eq`. Override with `derive_states` and `derive_events`:
 
 ```rust
 statemachine! {
@@ -207,7 +213,7 @@ statemachine! {
 
 ### Multiple State Machines
 
-Use namespacing for multiple state machines:
+Use `name` for namespacing when you need multiple state machines in the same scope:
 
 ```rust
 statemachine! {
@@ -224,150 +230,58 @@ statemachine! {
     }
 }
 
-// Generates: PlayerState, PlayerEvent with PlayerState::process_event()
-// Generates: EnemyState, EnemyEvent with EnemyState::process_event()
-```
-
-## DSL Syntax
-
-```rust
-statemachine! {
-    // Optional: namespace for multiple state machines
-    name: MyMachine,
-
-    // Optional: custom derives for State enum
-    derive_states: [Debug, Clone, PartialEq],
-
-    // Optional: custom derives for Event enum
-    derive_events: [Debug, Clone, PartialEq],
-
-    // Required: transition definitions
-    transitions: {
-        // Basic transition (initial state marked with *)
-        *Idle + Start = Running,
-
-        // State patterns (multiple source states)
-        Ready | Waiting + Start = Active,
-
-        // Event patterns (multiple trigger events)
-        Active + Stop | Pause = Idle,
-
-        // Wildcard (from any state)
-        _ + Reset = Idle,
-
-        // Internal transition (stay in same state)
-        Active + Tick = _,
-    }
-}
-```
-
-## Generated Code
-
-The macro generates:
-
-```rust
-// State enum (default derives: Debug, Copy, Clone, PartialEq, Eq)
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum State {
-    Idle,
-    Running,
-}
-
-impl Default for State {
-    fn default() -> Self {
-        State::Idle  // First state marked with *
-    }
-}
-
-// Event enum (same default derives)
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum Event {
-    Start,
-    Stop,
-}
-
-// Transition method on State
-impl State {
-    pub fn process_event(&self, event: Event) -> Option<State> {
-        // Returns Some(new_state) if transition is valid
-        // Returns None if no valid transition
-    }
-}
-```
-
-## Error Handling
-
-The `process_event` method returns `Option<State>`:
-- `Some(new_state)`: Transition is valid
-- `None`: No valid transition for current state + event
-
-You control when to apply the transition:
-
-```rust
-impl Machine {
-    fn try_transition(&mut self, event: Event) {
-        let Some(new_state) = self.state.process_event(event) else {
-            println!("Invalid transition");
-            return;
-        };
-
-        // Guards and actions here
-
-        self.state = new_state;
-    }
-}
+// Generates: PlayerState, PlayerEvent, EnemyState, EnemyEvent
 ```
 
 ## Compile Time Validation
 
-The macro validates your state machine at compile time.
-
-### Duplicate Transitions
+The macro validates your state machine at compile time. Duplicate transitions are rejected:
 
 ```rust
 statemachine! {
     transitions: {
-        *A + Event = B,
-        A + Event = C,  // ERROR: duplicate transition
+        *A + Go = B,
+        A + Go = C,  // ERROR: duplicate transition
     }
 }
 ```
 
-Error message:
 ```
-error: duplicate transition: state 'A' + event 'Event' is already defined
+error: duplicate transition: state 'A' + event 'Go' is already defined
        help: each combination of source state and event can only appear once
        note: if you need conditional behavior, use different events or handle logic in your wrapper
 ```
 
-## Performance
+## DSL Reference
 
-- **Zero cost**: Compiles to sequential `if` checks with early returns
-- **No allocations**: All operations are stack based
-- **Optimal codegen**: Uses `matches!()` macro for efficient pattern matching
-- **No runtime overhead**: All validation happens at compile time
+```rust
+statemachine! {
+    name: MyMachine,                          // Optional: generates MyMachineState, MyMachineEvent
+    derive_states: [Debug, Clone, PartialEq], // Optional: custom derives for State enum
+    derive_events: [Debug, Clone, PartialEq], // Optional: custom derives for Event enum
+
+    transitions: {
+        *Idle + Start = Running,              // Initial state marked with *
+        Ready | Waiting + Start = Active,     // State patterns (multiple source states)
+        Active + Stop | Pause = Idle,         // Event patterns (multiple trigger events)
+        _ + Reset = Idle,                     // Wildcard (from any state, lowest priority)
+        Active + Tick = _,                    // Internal transition (stay in same state)
+    }
+}
+```
 
 ## FAQ
 
-**Q: How do I write guards and actions?**
-
-A: Call `state.process_event(event)` to get the new state if valid. Check your guards, perform actions, then apply the state. This gives you full control, zero coupling, and clean code. See the [Guards and Actions](#guards-and-actions) section.
-
 **Q: Can I use this in `no_std` environments?**
 
-A: Yes! The generated code uses only `core` types (`Option`, `Default`) and requires no allocator at runtime.
-
-**Q: How do I handle conditional transitions?**
-
-A: `state.process_event(event)` returns `Option<State>`. Get the new state, check your guards with early returns, perform actions, then assign `self.state = new_state`. All guards must pass before the state changes.
+A: Yes. The generated code uses only `core` types (`Option`, `Default`) and requires no allocator at runtime.
 
 ## Examples
 
 See the [examples](examples/) directory for complete working examples:
-- `demo.rs`: Comprehensive robot control demonstrating all DSL features including guards, actions, state patterns, internal transitions, and wildcard transitions
+- `demo.rs`: Robot control demonstrating guards, actions, state patterns, internal transitions, and wildcards
 - `hierarchical.rs`: Hierarchical state machines using composition (player movement + weapon states)
 
-Run examples with:
 ```bash
 cargo run -r --example demo
 cargo run -r --example hierarchical
