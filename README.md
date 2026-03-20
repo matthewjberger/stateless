@@ -16,7 +16,7 @@ This library separates state machine structure from behavior. The DSL defines va
 - **Idiomatic Rust**: Use `Result`, methods, and proper error handling
 - **Zero cost**: Compiles to efficient sequential checks
 - **Type safe**: Leverages Rust's type system fully
-- **No dependencies**: `no_std` compatible
+- **No dependencies**: Generated code is `no_std` compatible (uses only `core`)
 - **Clear code**: Business logic lives in one place, not scattered
 
 ## Installation
@@ -157,7 +157,7 @@ statemachine! {
 
 ### Wildcard Transitions
 
-Transition from any state:
+Transition from any state. Specific transitions always take priority over wildcards, regardless of declaration order:
 
 ```rust
 statemachine! {
@@ -266,7 +266,8 @@ statemachine! {
 The macro generates:
 
 ```rust
-// State enum
+// State enum (default derives: Debug, Copy, Clone, PartialEq, Eq)
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum State {
     Idle,
     Running,
@@ -278,7 +279,8 @@ impl Default for State {
     }
 }
 
-// Event enum
+// Event enum (same default derives)
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Event {
     Start,
     Stop,
@@ -353,7 +355,7 @@ A: Call `state.process_event(event)` to get the new state if valid. Check your g
 
 **Q: Can I use this in `no_std` environments?**
 
-A: Yes! The library uses `#![no_std]` and only requires `alloc` for compilation (not at runtime).
+A: Yes! The generated code uses only `core` types (`Option`, `Default`) and requires no allocator at runtime.
 
 **Q: How do I handle conditional transitions?**
 
