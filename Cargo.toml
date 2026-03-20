@@ -1,6 +1,6 @@
 [package]
 name = "stateless"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Matthew Berger <matthewjordanberger@gmail.com>"]
 description = """
 A lightweight, zero-cost state machine library that separates structure from behavior.

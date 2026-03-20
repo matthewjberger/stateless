@@ -23,7 +23,7 @@ This library separates state machine structure from behavior. The DSL defines va
 
 ```toml
 [dependencies]
-stateless = "0.1.0"
+stateless = "0.2.0"
 ```
 
 ## Quick Start
