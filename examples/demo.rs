@@ -53,7 +53,6 @@ impl Robot {
         println!("  [State] Robot powered off");
         self.current_position = 0;
         self.target_position = None;
-        self.obstacle_count = 0;
         self.state = new_state;
     }
 
