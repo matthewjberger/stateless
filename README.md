@@ -25,7 +25,7 @@ Most state machine libraries couple behavior to the state machine itself — gua
 
 ```toml
 [dependencies]
-stateless = "0.3.0"
+stateless = "0.4.0"
 ```
 
 ## Quick Start
