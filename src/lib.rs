@@ -351,7 +351,7 @@ pub fn statemachine(input: TokenStream) -> TokenStream {
             let pattern = &state_patterns[0];
             quote! { matches!(*self, #pattern) }
         } else {
-            quote! { #(matches!(*self, #state_patterns))||* }
+            quote! { (#(matches!(*self, #state_patterns))||*) }
         };
 
         let dest = if is_wildcard {

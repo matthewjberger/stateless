@@ -8,7 +8,9 @@ A lightweight, zero-cost state machine library for Rust that separates structure
 
 ## Philosophy
 
-This library separates state machine structure from behavior. The DSL defines valid state transitions, while your wrapper code handles guards, actions, and business logic in idiomatic Rust.
+Most state machine libraries couple behavior to the state machine itself — guards, actions, and context structs all tangled into the DSL. This makes the state machine hard to test, hard to refactor, and impossible to compose.
+
+`stateless` takes the opposite approach: the macro is a pure transition table. It generates two enums and a lookup function. Guards, side effects, and error handling live in your own code, using normal Rust patterns. The state machine doesn't know your types exist, and your types don't depend on any framework trait.
 
 ## Why Use This?
 
