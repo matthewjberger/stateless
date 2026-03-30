@@ -76,8 +76,13 @@ pub enum Event {
 
 impl State {
     pub fn process_event(&self, event: Event) -> Option<State> {
-        // Returns Some(new_state) if transition is valid
-        // Returns None if no valid transition
+        if matches!(*self, State::Idle) && matches!(event, Event::Start) {
+            return Some(State::Running);
+        }
+        if matches!(*self, State::Running) && matches!(event, Event::Stop) {
+            return Some(State::Idle);
+        }
+        None
     }
 }
 ```
