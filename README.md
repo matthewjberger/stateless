@@ -56,7 +56,7 @@ statemachine! {
 The macro generates:
 
 ```rust
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum State {
     Idle,
     Running,
@@ -68,13 +68,16 @@ impl Default for State {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Event {
     Start,
     Stop,
 }
 
 impl State {
+    pub const ALL: &[State] = &[State::Idle, State::Running];
+    pub const DOT: &str = "digraph { ... }";
+
     pub fn process_event(&self, event: Event) -> Option<State> {
         if matches!(*self, State::Idle) && matches!(event, Event::Start) {
             return Some(State::Running);
@@ -84,6 +87,17 @@ impl State {
         }
         None
     }
+
+    pub fn valid_events(&self) -> &'static [Event] {
+        match self {
+            State::Idle => &[Event::Start],
+            State::Running => &[Event::Stop],
+        }
+    }
+}
+
+impl Event {
+    pub const ALL: &[Event] = &[Event::Start, Event::Stop];
 }
 ```
 
@@ -190,9 +204,93 @@ impl Robot {
 }
 ```
 
+### Variant Enumeration
+
+`State::ALL` and `Event::ALL` list every variant as static slices. Useful for testing, serialization, and debug UIs:
+
+```rust
+statemachine! {
+    transitions: {
+        *Idle + Start = Running,
+        Running + Stop = Idle,
+    }
+}
+
+assert_eq!(State::ALL, &[State::Idle, State::Running]);
+assert_eq!(Event::ALL, &[Event::Start, Event::Stop]);
+
+for state in State::ALL {
+    println!("{:?} accepts {:?}", state, state.valid_events());
+}
+```
+
+### Valid Events
+
+`valid_events()` returns the events that produce transitions from a given state. Wildcard transitions are included. Useful for UIs, help text, and validation:
+
+```rust
+statemachine! {
+    transitions: {
+        *Idle + Start = Running,
+        Running + Stop = Idle,
+        _ + Reset = Idle,
+    }
+}
+
+assert_eq!(State::Idle.valid_events(), &[Event::Start, Event::Reset]);
+assert_eq!(State::Running.valid_events(), &[Event::Stop, Event::Reset]);
+```
+
+Terminal state detection comes for free:
+
+```rust
+statemachine! {
+    transitions: {
+        *Start + Go = End,
+    }
+}
+
+assert!(!State::Start.valid_events().is_empty());
+assert!(State::End.valid_events().is_empty()); // terminal state
+```
+
+### DOT Graph Output
+
+`State::DOT` is a `&str` const containing the [Graphviz DOT](https://graphviz.org/) representation of the transition table. The initial state is rendered as a double circle. Wildcard transitions are expanded to all applicable states, respecting specific-transition priority:
+
+```rust
+statemachine! {
+    transitions: {
+        *Idle + Start = Running,
+        Running + Stop = Idle,
+    }
+}
+
+println!("{}", State::DOT);
+// digraph {
+//   rankdir=LR;
+//   node [shape=circle];
+//   "Idle" [shape=doublecircle];
+//   "Idle" -> "Running" [label="Start"];
+//   "Running" -> "Idle" [label="Stop"];
+// }
+```
+
+Paste the output into [GraphvizOnline](https://dreampuf.github.io/GraphvizOnline) to render it instantly, or pipe it locally:
+
+```bash
+echo 'PASTE_DOT_OUTPUT_HERE' | dot -Tpng -o states.png
+```
+
+Here's the DOT output from the [demo example](examples/demo.rs):
+
+<p align="center"><img src="demo.png" alt="Demo state machine graph" width="700"></p>
+
+`DOT` is a `const` — if you never reference it, it has zero binary footprint.
+
 ### Custom Derives
 
-Default derives are `Debug, Copy, Clone, PartialEq, Eq`. Override with `derive_states` and `derive_events`:
+Default derives are `Debug, Copy, Clone, PartialEq, Eq, Hash`. Override with `derive_states` and `derive_events`:
 
 ```rust
 statemachine! {
@@ -234,7 +332,6 @@ The macro validates your state machine at compile time:
 - **Multiple initial states**: more than one state marked with `*`
 - **Empty transitions**: no transitions defined
 - **Duplicate wildcards**: same event used in multiple wildcard transitions
-
 ```rust
 statemachine! {
     transitions: {
@@ -272,7 +369,7 @@ statemachine! {
 
 **Q: Can I use this in `no_std` environments?**
 
-A: Yes. The generated code uses only `core` types (`Option`, `Default`) and requires no allocator at runtime.
+A: Yes. The generated code uses only `core` types and traits and requires no allocator at runtime.
 
 ## Examples
 

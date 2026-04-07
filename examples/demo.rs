@@ -157,6 +157,22 @@ impl Robot {
 fn main() {
     let mut robot = Robot::new();
 
+    println!("═══ State Machine Info ═══");
+    println!("States: {:?}", State::ALL);
+    println!("Events: {:?}", Event::ALL);
+    println!();
+
+    println!("═══ Valid Events Per State ═══");
+    for state in State::ALL {
+        let events = state.valid_events();
+        if events.is_empty() {
+            println!("  {:?}: terminal (no valid events)", state);
+        } else {
+            println!("  {:?}: {:?}", state, events);
+        }
+    }
+    println!();
+
     println!("═══ Startup Sequence ═══");
     println!("Current state: {:?}\n", robot.state);
 
@@ -218,4 +234,8 @@ fn main() {
 
     println!("Final position: {}", robot.current_position);
     println!("Total obstacles encountered: {}", robot.obstacle_count);
+    println!();
+
+    println!("═══ DOT Graph ═══");
+    println!("{}", State::DOT);
 }

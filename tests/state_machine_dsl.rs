@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use stateless::statemachine;
 
 #[test]
@@ -155,6 +157,12 @@ fn test_state_machine_dsl() {
     machine.connect(10);
     assert_eq!(machine.state, State::Running);
     assert_eq!(machine.connection_id, 0);
+
+    let mut labels = HashMap::new();
+    labels.insert(State::Idle, "idle");
+    labels.insert(State::Running, "running");
+    labels.insert(State::Connected, "connected");
+    assert_eq!(labels[&machine.state], "running");
 }
 
 #[test]
@@ -502,4 +510,179 @@ fn initial_marker_on_non_first_state() {
         LateInitState::B.process_event(LateInitEvent::Go),
         Some(LateInitState::A)
     );
+}
+
+#[test]
+fn state_all_contains_every_variant() {
+    statemachine! {
+        name: AllTest,
+        transitions: {
+            *A + Go = B,
+            B + Go = C,
+        }
+    }
+
+    assert_eq!(
+        AllTestState::ALL,
+        &[AllTestState::A, AllTestState::B, AllTestState::C]
+    );
+    assert_eq!(AllTestEvent::ALL, &[AllTestEvent::Go]);
+}
+
+#[test]
+fn valid_events_specific_transitions() {
+    statemachine! {
+        name: ValidSpecific,
+        transitions: {
+            *Idle + Start = Running,
+            Running + Stop = Idle,
+        }
+    }
+
+    assert_eq!(
+        ValidSpecificState::Idle.valid_events(),
+        &[ValidSpecificEvent::Start]
+    );
+    assert_eq!(
+        ValidSpecificState::Running.valid_events(),
+        &[ValidSpecificEvent::Stop]
+    );
+}
+
+#[test]
+fn valid_events_includes_wildcards() {
+    statemachine! {
+        name: ValidWild,
+        transitions: {
+            *A + Go = B,
+            B + Go = A,
+            _ + Reset = A,
+        }
+    }
+
+    assert_eq!(
+        ValidWildState::A.valid_events(),
+        &[ValidWildEvent::Go, ValidWildEvent::Reset]
+    );
+    assert_eq!(
+        ValidWildState::B.valid_events(),
+        &[ValidWildEvent::Go, ValidWildEvent::Reset]
+    );
+}
+
+#[test]
+fn valid_events_terminal_state_is_empty() {
+    statemachine! {
+        name: Terminal,
+        transitions: {
+            *Start + Go = End,
+        }
+    }
+
+    assert_eq!(TerminalState::Start.valid_events(), &[TerminalEvent::Go]);
+    assert!(TerminalState::End.valid_events().is_empty());
+}
+
+#[test]
+fn valid_events_wildcard_deduplicates() {
+    statemachine! {
+        name: ValidDedup,
+        transitions: {
+            *A + Reset = A,
+            _ + Reset = A,
+        }
+    }
+
+    assert_eq!(ValidDedupState::A.valid_events(), &[ValidDedupEvent::Reset]);
+}
+
+#[test]
+fn dot_contains_transitions() {
+    statemachine! {
+        name: DotTest,
+        transitions: {
+            *Idle + Start = Running,
+            Running + Stop = Idle,
+        }
+    }
+
+    assert_eq!(
+        DotTestState::ALL,
+        &[DotTestState::Idle, DotTestState::Running]
+    );
+    let dot = DotTestState::DOT;
+    assert!(dot.contains("digraph"));
+    assert!(dot.contains("\"Idle\" [shape=doublecircle]"));
+    assert!(dot.contains("\"Idle\" -> \"Running\" [label=\"Start\"]"));
+    assert!(dot.contains("\"Running\" -> \"Idle\" [label=\"Stop\"]"));
+    assert!(dot.contains("rankdir=LR"));
+}
+
+#[test]
+fn dot_wildcards_expand_to_all_states() {
+    statemachine! {
+        name: DotWild,
+        transitions: {
+            *A + Go = B,
+            _ + Reset = A,
+        }
+    }
+
+    assert_eq!(DotWildState::ALL, &[DotWildState::A, DotWildState::B]);
+    let dot = DotWildState::DOT;
+    assert!(dot.contains("\"A\" -> \"B\" [label=\"Go\"]"));
+    assert!(dot.contains("\"B\" -> \"A\" [label=\"Reset\"]"));
+}
+
+#[test]
+fn dot_wildcard_skips_specific_overlap() {
+    statemachine! {
+        name: DotOverlap,
+        transitions: {
+            *A + Go = B,
+            _ + Go = A,
+        }
+    }
+
+    assert_eq!(
+        DotOverlapState::ALL,
+        &[DotOverlapState::A, DotOverlapState::B]
+    );
+    let dot = DotOverlapState::DOT;
+    assert!(dot.contains("\"A\" -> \"B\" [label=\"Go\"]"));
+    assert!(dot.contains("\"B\" -> \"A\" [label=\"Go\"]"));
+    let a_go_count = dot.matches("\"A\" -> ").count();
+    assert_eq!(a_go_count, 1);
+}
+
+#[test]
+fn dot_internal_transition_is_self_loop() {
+    statemachine! {
+        name: DotInternal,
+        transitions: {
+            *Moving + Tick = _,
+            Moving + Arrive = Idle,
+        }
+    }
+
+    assert_eq!(
+        DotInternalState::ALL,
+        &[DotInternalState::Moving, DotInternalState::Idle]
+    );
+    let dot = DotInternalState::DOT;
+    assert!(dot.contains("\"Moving\" -> \"Moving\" [label=\"Tick\"]"));
+    assert!(dot.contains("\"Moving\" -> \"Idle\" [label=\"Arrive\"]"));
+}
+
+#[test]
+fn all_with_namespaced_machines() {
+    statemachine! {
+        name: Ns,
+        transitions: {
+            *X + Flip = Y,
+        }
+    }
+
+    assert_eq!(NsState::ALL, &[NsState::X, NsState::Y]);
+    assert_eq!(NsEvent::ALL, &[NsEvent::Flip]);
 }

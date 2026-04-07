@@ -277,4 +277,20 @@ fn main() {
         player.position.0, player.position.1
     );
     println!("Has item: {}", player.item.is_some());
+    println!();
+
+    println!("═══ State Machine Info ═══");
+    println!("Player states: {:?}", PlayerState::ALL);
+    println!("Player events: {:?}", PlayerEvent::ALL);
+    println!("Item states: {:?}", ItemState::ALL);
+    println!("Item events: {:?}", ItemEvent::ALL);
+    println!();
+
+    println!("═══ Valid Events ═══");
+    for state in PlayerState::ALL {
+        println!("  Player::{:?} -> {:?}", state, state.valid_events());
+    }
+    for state in ItemState::ALL {
+        println!("  Item::{:?} -> {:?}", state, state.valid_events());
+    }
 }
